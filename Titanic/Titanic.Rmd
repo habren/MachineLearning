@@ -353,29 +353,38 @@ cv_svm_predict_test <- predict(svmmodel, newdata=cv_test, type="response")
 cv_combined_predict_test <- as.integer(cv_lr_predict_test) + as.integer(cv_rf_predict_test) + as.integer(cv_svm_predict_test)
 cv_combined_predict_test <- ifelse(cv_combined_predict_test >=4, 1, 0)
 
+cv.predict <- data.frame(LinearRegression=cv_lr_predict_test, RandomForest=cv_rf_predict_test, SVM=cv_svm_predict_test, Ensemble=cv_combined_predict_test)
+sapply(colnames(cv.predict), function(name){
+  print(name)
+  print(paste(' Recall:', Recall(cv_test_true, cv.predict[[name]])))
+  print(paste(' Precision:', Precision(cv_test_true, cv.predict[[name]])))
+  print(paste(' Accuracy', Accuracy(cv.predict[[name]], cv_test_true)))
+  print(paste(' AUC', AUC(cv.predict[[name]], cv_test_true)))
+  print('')
+})
 
 
-Recall(cv_test_true, cv_lr_predict_test)
-Precision(cv_test_true, cv_lr_predict_test)
-Accuracy(cv_lr_predict_test, cv_test_true)
-AUC(cv_lr_predict_test, cv_test_true)
-
-Recall(cv_test_true, cv_rf_predict_test)
-Precision(cv_test_true, cv_rf_predict_test)
-Accuracy(cv_rf_predict_test, cv_test_true)
-AUC(cv_rf_predict_test, cv_test_true)
-importance(rfmodel)
-
-
-Recall(cv_test_true, cv_svm_predict_test)
-Precision(cv_test_true, cv_svm_predict_test)
-Accuracy(cv_svm_predict_test, cv_test_true)
-AUC(cv_svm_predict_test, cv_test_true)
-
-Recall(cv_test_true, cv_combined_predict_test)
-Precision(cv_test_true, cv_combined_predict_test)
-Accuracy(cv_combined_predict_test, cv_test_true)
-AUC(cv_combined_predict_test, cv_test_true)
+# Recall(cv_test_true, cv_lr_predict_test)
+# Precision(cv_test_true, cv_lr_predict_test)
+# Accuracy(cv_lr_predict_test, cv_test_true)
+# AUC(cv_lr_predict_test, cv_test_true)
+# 
+# Recall(cv_test_true, cv_rf_predict_test)
+# Precision(cv_test_true, cv_rf_predict_test)
+# Accuracy(cv_rf_predict_test, cv_test_true)
+# AUC(cv_rf_predict_test, cv_test_true)
+# importance(rfmodel)
+# 
+# 
+# Recall(cv_test_true, cv_svm_predict_test)
+# Precision(cv_test_true, cv_svm_predict_test)
+# Accuracy(cv_svm_predict_test, cv_test_true)
+# AUC(cv_svm_predict_test, cv_test_true)
+# 
+# Recall(cv_test_true, cv_combined_predict_test)
+# Precision(cv_test_true, cv_combined_predict_test)
+# Accuracy(cv_combined_predict_test, cv_test_true)
+# AUC(cv_combined_predict_test, cv_test_true)
 ```
 
 
