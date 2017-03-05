@@ -326,15 +326,6 @@ plot(rfmodel)
 svmmodel <- svm(formula=model.formula, data=train.data, na.action = na.omit)
 
 
-models <- vector(mode='list', length=3)
-models[[1]] <- lrmodel
-models[[2]] <- rfmodel
-models[[3]] <- svmmodel
-
-model.name <- c('Linear regression', 'Random forest', 'Support vector machine')
-model.name
-
-
 ```
 
 
@@ -363,28 +354,6 @@ sapply(colnames(cv.predict), function(name){
   print('')
 })
 
-
-# Recall(cv_test_true, cv_lr_predict_test)
-# Precision(cv_test_true, cv_lr_predict_test)
-# Accuracy(cv_lr_predict_test, cv_test_true)
-# AUC(cv_lr_predict_test, cv_test_true)
-# 
-# Recall(cv_test_true, cv_rf_predict_test)
-# Precision(cv_test_true, cv_rf_predict_test)
-# Accuracy(cv_rf_predict_test, cv_test_true)
-# AUC(cv_rf_predict_test, cv_test_true)
-# importance(rfmodel)
-# 
-# 
-# Recall(cv_test_true, cv_svm_predict_test)
-# Precision(cv_test_true, cv_svm_predict_test)
-# Accuracy(cv_svm_predict_test, cv_test_true)
-# AUC(cv_svm_predict_test, cv_test_true)
-# 
-# Recall(cv_test_true, cv_combined_predict_test)
-# Precision(cv_test_true, cv_combined_predict_test)
-# Accuracy(cv_combined_predict_test, cv_test_true)
-# AUC(cv_combined_predict_test, cv_test_true)
 ```
 
 
