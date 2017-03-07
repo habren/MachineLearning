@@ -305,10 +305,10 @@ IV(X=df$Family, Y=df$Survived)
 
 ```{r}
 set.seed(256)
-cv_train_sample <- sample(1:nrow(train), as.integer(0.9 * nrow(train)), replace = TRUE)
-cv_train <- full[cv_train_sample,]
-cv_test <- full[1:nrow(train),][-cv_train_sample,]
-cv_test_true <- full$Survived[1:nrow(train)][-cv_train_sample]
+cv.train.sample <- sample(1:nrow(train), as.integer(0.8 * nrow(train)), replace = TRUE)
+cv.train <- full[cv.train.sample,]
+cv.test <- full[1:nrow(train),][-cv.train.sample,]
+cv.test_true <- full$Survived[1:nrow(train)][-cv.train.sample]
 ```
 
 
@@ -325,7 +325,6 @@ plot(rfmodel)
 
 svmmodel <- svm(formula=model.formula, data=train.data, na.action = na.omit)
 
-
 ```
 
 
@@ -338,19 +337,22 @@ summary(svmmodel)
 print(lrmodel)
 print(rfmodel)
 print(svmmodel)
-cv_lr_predict_test <- ifelse(predict(lrmodel, newdata=cv_test, type="response") > 0.5, 1, 0)
-cv_rf_predict_test <- predict(rfmodel, newdata=cv_test, type="response")
-cv_svm_predict_test <- predict(svmmodel, newdata=cv_test, type="response")
-cv_combined_predict_test <- as.integer(cv_lr_predict_test) + as.integer(cv_rf_predict_test) + as.integer(cv_svm_predict_test)
-cv_combined_predict_test <- ifelse(cv_combined_predict_test >=4, 1, 0)
+cv.lr.predict <- factor(ifelse(predict(lrmodel, newdata=cv.test, type="response") > 0.5, 1, 0), levels=c(0, 1))
+cv.rf.predict <- predict(rfmodel, newdata=cv.test, type="response")
+cv.svm.predict <- predict(svmmodel, newdata=cv.test, type="response")
+cv.combined.predict <- as.integer(cv.lr.predict) + as.integer(cv.rf.predict) + as.integer(cv.svm.predict)
+cv.combined.predict <- ifelse(cv.combined.predict >= 5 , 1, 0)
 
-cv.predict <- data.frame(LinearRegression=cv_lr_predict_test, RandomForest=cv_rf_predict_test, SVM=cv_svm_predict_test, Ensemble=cv_combined_predict_test)
+cv.predict <- data.frame(LinearRegression=cv.lr.predict, RandomForest=cv.rf.predict, SVM=cv.svm.predict, Ensemble=cv.combined.predict)
+head(cv.predict, 200)
 sapply(colnames(cv.predict), function(name){
+  str(cv.predict[[name]])
+  mode(cv.predict[[name]])
   print(name)
-  print(paste(' Recall:', Recall(cv_test_true, cv.predict[[name]])))
-  print(paste(' Precision:', Precision(cv_test_true, cv.predict[[name]])))
-  print(paste(' Accuracy', Accuracy(cv.predict[[name]], cv_test_true)))
-  print(paste(' AUC', AUC(cv.predict[[name]], cv_test_true)))
+  print(paste(' Recall:', Recall(cv.test_true, cv.predict[[name]])))
+  print(paste(' Precision:', Precision(cv.test_true, cv.predict[[name]])))
+  print(paste(' Accuracy', Accuracy(cv.predict[[name]], cv.test_true)))
+  print(paste(' AUC', AUC(cv.predict[[name]], cv.test_true)))
   print('')
 })
 
@@ -363,11 +365,11 @@ test.data <- full[(nrow(train)+1):(nrow(train)+nrow(test)), model.features]
 
 svm.predict <- predict(svmmodel, newdata=test.data, type="response")
 rf.predict <- predict(rfmodel, newdata=test.data, type="response")
-lr.predict <- ifelse(predict(lrmodel, newdata=test.data, type="response") > 0.5, 1, 0)
+lr.predict <- factor(ifelse(predict(lrmodel, newdata=test.data, type="response") > 0.5, 1, 0), levels=c(0, 1))
 
 
 combined.predict <- as.integer(svm.predict) + as.integer(rf.predict) + as.integer(lr.predict)
-combined.predict <- sapply(combined.predict, function(x){if(x>4){1} else{0}})
+combined.predict <- sapply(combined.predict, function(x){if(x >= 6){1} else{0}})
 
 test.result <- data.frame(full$PassengerId[(nrow(train)+1):(nrow(full))], Survived=combined.predict)
 colnames(test.result) <- c('PassengerId', 'Survived')
