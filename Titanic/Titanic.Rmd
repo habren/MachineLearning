@@ -33,10 +33,12 @@ library(plyr)
 library(stringr) # String manipulation
 library(InformationValue) # IV / WOE calculation
 library(MLmetrics) # Mache learning metrics.e.g. Recall, Precision, Accuracy, AUC
-library(rpart)
+library(rpart) # Decision tree utils
 library(randomForest) # Random Forest
 library(dplyr) # Data manipulation
 library(e1071) # SVM
+library(Amelia) # Missing value utils
+library(party) # Conditional inference trees
 ```
 
 
@@ -320,62 +322,69 @@ model.formula <- as.formula(paste('Survived ~ ', paste(model.features, collapse=
 
 lrmodel <- glm(formula=model.formula, data=train.data, family=binomial)
 
-rfmodel <- randomForest(formula=model.formula, data=train.data, na.action = na.omit)
+rfmodel <- randomForest(formula=model.formula, data=train.data, ntree=2000)
 plot(rfmodel)
 
-svmmodel <- svm(formula=model.formula, data=train.data, na.action = na.omit)
+svmmodel <- svm(formula=model.formula, data=train.data)
 
-```
+citmodel <- cforest(formula=model.formula, data=train.data, controls=cforest_unbiased(ntree=2000, mtry=3))
 
-
-
-
-```{r 'cross validation'}
 summary(lrmodel)
 summary(rfmodel)
 summary(svmmodel)
+summary(citmodel)
 print(lrmodel)
 print(rfmodel)
 print(svmmodel)
-cv.lr.predict <- factor(ifelse(predict(lrmodel, newdata=cv.test, type="response") > 0.5, 1, 0), levels=c(0, 1))
-cv.rf.predict <- predict(rfmodel, newdata=cv.test, type="response")
-cv.svm.predict <- predict(svmmodel, newdata=cv.test, type="response")
-cv.combined.predict <- as.integer(cv.lr.predict) + as.integer(cv.rf.predict) + as.integer(cv.svm.predict)
-cv.combined.predict <- ifelse(cv.combined.predict >= 5 , 1, 0)
-
-cv.predict <- data.frame(LinearRegression=cv.lr.predict, RandomForest=cv.rf.predict, SVM=cv.svm.predict, Ensemble=cv.combined.predict)
-head(cv.predict, 200)
-sapply(colnames(cv.predict), function(name){
-  str(cv.predict[[name]])
-  mode(cv.predict[[name]])
-  print(name)
-  print(paste(' Recall:', Recall(cv.test_true, cv.predict[[name]])))
-  print(paste(' Precision:', Precision(cv.test_true, cv.predict[[name]])))
-  print(paste(' Accuracy', Accuracy(cv.predict[[name]], cv.test_true)))
-  print(paste(' AUC', AUC(cv.predict[[name]], cv.test_true)))
-  print('')
-})
-
+print(citmodel)
 ```
 
 
+```{r 'Definition of assemble predict function'}
+assemble.predict <- function(data) {
+  lr.predict <- factor(ifelse(predict(lrmodel, newdata=data, type="response") > 0.5, 1, 0), levels=c(0, 1))
+  rf.predict <- predict(rfmodel, newdata=data, type="response")
+  svm.predict <- predict(svmmodel, newdata=data, type="response")
+  cit.predict <- factor(predict(citmodel, newdata=data, type="response"), levels=c(0, 1))
+  assemble.result <- as.integer(lr.predict) + as.integer(rf.predict) + as.integer(svm.predict) + as.integer(cit.predict)
+  assemble.result <- ifelse(assemble.result >= 6 , 1, 0)
 
-```{r 'predicting'}
+  return(data.frame(LinearRegression=lr.predict, RandomForest=rf.predict, SVM=svm.predict, CIT=cit.predict, Ensemble=assemble.result))
+}
+```
+
+
+```{r 'Definition of cross validation function'}
+cross.validation <- function(predict.data, true.data) {
+  sapply(colnames(predict.data), function(name){
+    print(name)
+    print(paste(' Recall:', Recall(true.data, predict.data[[name]])))
+    print(paste(' Precision:', Precision(true.data, predict.data[[name]])))
+    print(paste(' Accuracy', Accuracy(predict.data[[name]], true.data)))
+    print(paste(' AUC', AUC(predict.data[[name]], true.data)))
+    print('')
+  })
+}
+
+cv.predict <- assemble.predict(cv.test)
+```
+
+```{r 'Cross validation'}
+cv.predict <- assemble.predict(cv.test)
+cross.validation(cv.predict, cv.test_true)
+```
+
+
+```{r 'Predicting'}
 test.data <- full[(nrow(train)+1):(nrow(train)+nrow(test)), model.features]
+test.predict <- assemble.predict(test.data)
 
-svm.predict <- predict(svmmodel, newdata=test.data, type="response")
-rf.predict <- predict(rfmodel, newdata=test.data, type="response")
-lr.predict <- factor(ifelse(predict(lrmodel, newdata=test.data, type="response") > 0.5, 1, 0), levels=c(0, 1))
-
-
-combined.predict <- as.integer(svm.predict) + as.integer(rf.predict) + as.integer(lr.predict)
-combined.predict <- sapply(combined.predict, function(x){if(x >= 6){1} else{0}})
-
-test.result <- data.frame(full$PassengerId[(nrow(train)+1):(nrow(full))], Survived=combined.predict)
+test.result <- data.frame(full$PassengerId[(nrow(train)+1):(nrow(full))], Survived=test.predict$RandomForest)
 colnames(test.result) <- c('PassengerId', 'Survived')
+```
 
+```{r 'Predict result saving'}
 write.csv(test.result, file="result.csv", row.names=FALSE, quote=FALSE)
-table(full$Fare)
 ```
 
 
