@@ -39,6 +39,8 @@ library(dplyr) # Data manipulation
 library(e1071) # SVM
 library(Amelia) # Missing value utils
 library(party) # Conditional inference trees
+library(gbm) # AdaBoost
+library(class) # KNN
 ```
 
 
@@ -55,9 +57,9 @@ full$Fare[is.na(full$Fare)] <- median(full$Fare[!is.na(full$Fare)])
 
 ```{r}
 full$Title <- gsub('(.*, )|(\\..*)', '', full$Name)
-full$Title[full$Title %in% c('Mlle', 'Ms')] <- 'Miss'
-full$Title[full$Title =='Mme'] <- 'Mrs'
-full$Title[!full$Title %in% c('Master', 'Miss', 'Mr', 'Mrs', 'Dr')] <- 'Others'
+full$Title[full$Title %in% c('Mlle', 'Ms', 'Lady')] <- 'Miss'
+full$Title[full$Title %in% c('Mme', 'the Countess', 'Dona')] <- 'Mrs'
+full$Title[full$Title %in% c('Mr', 'Capt', 'Major', 'Col', 'Don', 'Sir', 'Jonkheer', 'Rev')] <- 'Mr'
 full$Title <- as.factor(full$Title)
 ```
 
@@ -129,37 +131,7 @@ IV(X=factor(full$SibSp[1:nrow(train)]), Y=full$Survived[1:nrow(train)])
 
 
 
-```{r cache=TRUE}
-ggplot(data = full[1:nrow(train),], aes(x = sapply(full$Age[1:nrow(train)], function(x){ifelse(is.na(x), 100, x)}), color=factor(Survived))) + geom_line(aes(file=..count..), stat = 'bin', binwidth=3)  + labs(title = "How Age impact survivor", x = "Age", y = "Count", fill = "Survived")
-```
 
-
-
-
-
-```{r cache=TRUE}
-df <- data.frame(Age <- sapply(full$Age[1:nrow(train)], FUN=function(x){if(is.na(x)){" NA"} else if(x < 15){"0-15"} else if (x < 35) {" 15-35"} else if(x < 60) {" 35-60"}  else {"60"}}), Survived <- full$Survived[1:nrow(train)])
-ggplot(data = df, mapping = aes(x = factor(Age), y = ..count.., fill=factor(Survived))) + geom_bar(stat = "count", position='dodge') + labs(title = "How Age impact survivor", x = "Age", y = "Count", fill = "Survived")
-WOETable(X=df$Age, Y=df$Survived)
-IV(X=df$Age, Y=df$Survived)
-```
-
-
-
-
-
-```{r cache=TRUE}
-df <- data.frame(Age <- sapply(full$Age[1:nrow(train)], FUN=function(x){if((!is.na(x)) && (x<18)){"teenager"} else {"adult"}}), Survived <- full$Survived[1:nrow(train)])
-ggplot(data = df, mapping = aes(x = factor(Age), y = ..count.., fill=factor(Survived))) + geom_bar(stat = "count", position='dodge') + labs(title = "How Age impact survivor", x = "Age", y = "Count", fill = "Survived")
-WOETable(X=df$Age, Y=df$Survived)
-IV(X=df$Age, Y=df$Survived)
-```
-
-
-
-```{r}
-full$Age <- as.factor(sapply(full$Age, function(x){if(is.na(x)){" N-A"} else if(x < 15){"0-15"} else if (x < 35) {" 15-35"} else if(x < 60) {" 35-60"}  else {"old"}}))
-```
 
 
 
@@ -189,6 +161,7 @@ ggplot(full[!is.na(full$Embarked),], aes(x=Embarked, y=Fare, fill=factor(Pclass)
 
 ```{r}
 full$Embarked[is.na(full$Embarked)] <- 'C'
+full$Embarked <- as.factor(full$Embarked)
 ```
 
 
@@ -201,11 +174,6 @@ ggplot(data = full[1:nrow(train),], mapping = aes(x = factor(Embarked), y = ..co
 ```
 
 
-
-
-```{r results='hide'}
-full$Embarked <- as.factor(ifelse(is.na(full$Embarked), "N-A", full$Embarked))
-```
 
 
 
@@ -304,6 +272,50 @@ IV(X=df$Family, Y=df$Survived)
 
 
 
+# ```{r}
+# age.model <- rpart(Age ~ Pclass + Sex + SibSp + Parch + Fare + Embarked + Title + Family, data=full[!is.na(full$Age), ], method='anova')
+# full$Age[is.na(full$Age)] <- predict(age.model, full[is.na(full$Age), ])
+# ```
+
+
+
+
+
+```{r cache=TRUE}
+ggplot(data = full[1:nrow(train),], aes(x = sapply(full$Age[1:nrow(train)], function(x){ifelse(is.na(x), 100, x)}), color=factor(Survived))) + geom_line(aes(file=..count..), stat = 'bin', binwidth=3)  + labs(title = "How Age impact survivor", x = "Age", y = "Count", fill = "Survived")
+```
+
+
+
+
+
+```{r cache=TRUE}
+df <- data.frame(Age <- sapply(full$Age[1:nrow(train)], FUN=function(x){if(is.na(x)){" NA"} else if(x < 15){"0-15"} else if (x < 35) {" 15-35"} else if(x < 60) {" 35-60"}  else {"60"}}), Survived <- full$Survived[1:nrow(train)])
+ggplot(data = df, mapping = aes(x = factor(Age), y = ..count.., fill=factor(Survived))) + geom_bar(stat = "count", position='dodge') + labs(title = "How Age impact survivor", x = "Age", y = "Count", fill = "Survived")
+WOETable(X=df$Age, Y=df$Survived)
+IV(X=df$Age, Y=df$Survived)
+```
+
+
+
+
+
+```{r cache=TRUE}
+df <- data.frame(Age <- sapply(full$Age[1:nrow(train)], FUN=function(x){if((!is.na(x)) && (x<18)){"teenager"} else {"adult"}}), Survived <- full$Survived[1:nrow(train)])
+ggplot(data = df, mapping = aes(x = factor(Age), y = ..count.., fill=factor(Survived))) + geom_bar(stat = "count", position='dodge') + labs(title = "How Age impact survivor", x = "Age", y = "Count", fill = "Survived")
+WOETable(X=df$Age, Y=df$Survived)
+IV(X=df$Age, Y=df$Survived)
+```
+
+
+
+```{r}
+full$Age <- as.factor(sapply(full$Age, function(x){if(is.na(x)){" N-A"} else if(x < 15){"0-15"} else if (x < 35) {" 15-35"} else if(x < 60) {" 35-60"}  else {"old"}}))
+```
+
+
+
+
 
 ```{r}
 set.seed(256)
@@ -315,10 +327,15 @@ cv.test_true <- full$Survived[1:nrow(train)][-cv.train.sample]
 
 
 ```{r "training model"}
+full$Result <- full$Survived
+levels(full$Result) <- c(0, 1)
+full$Result <- as.integer(full$Result) - 1
+
 train.data <- full[1:nrow(train),]
 
 model.features <- c('Age', 'Fare', 'Cabin', 'Embarked', 'Pclass', 'Sex', 'Family', 'Title', 'Mother')
 model.formula <- as.formula(paste('Survived ~ ', paste(model.features, collapse=' + ')))
+
 
 lrmodel <- glm(formula=model.formula, data=train.data, family=binomial)
 
@@ -329,14 +346,37 @@ svmmodel <- svm(formula=model.formula, data=train.data)
 
 citmodel <- cforest(formula=model.formula, data=train.data, controls=cforest_unbiased(ntree=2000, mtry=3))
 
+
+# gbmmodel <- gbm(
+#                 #formula = model.formula,
+#                 Result ~ Age + Fare + Cabin + Embarked + Pclass + Sex + Family + Title + Mother,
+#                 data = train.data,
+#                 distribution = "adaboost",
+#                 interaction.depth = 5,
+#                 n.trees = 2000,
+#                 shrinkage = 0.001,
+#                 bag.fraction = 0.8,
+#                 n.cores = 8,
+#                 verbose = FALSE)
+# 
+# gbm.predict <- predict.gbm(gbmmodel, newdata=cv.test, n.trees = 2000)
+# print('***************head*******************')
+# head(gbm.predict, 20)
+
 summary(lrmodel)
 summary(rfmodel)
 summary(svmmodel)
 summary(citmodel)
+#summary(xgbmodel)
+#summary(gbmmodel)
 print(lrmodel)
 print(rfmodel)
 print(svmmodel)
 print(citmodel)
+#print(xgbmodel)
+#print(gbmmodel)
+
+
 ```
 
 
@@ -346,6 +386,9 @@ assemble.predict <- function(data) {
   rf.predict <- predict(rfmodel, newdata=data, type="response")
   svm.predict <- predict(svmmodel, newdata=data, type="response")
   cit.predict <- factor(predict(citmodel, newdata=data, type="response"), levels=c(0, 1))
+
+
+
   assemble.result <- as.integer(lr.predict) + as.integer(rf.predict) + as.integer(svm.predict) + as.integer(cit.predict)
   assemble.result <- ifelse(assemble.result >= 6 , 1, 0)
 
@@ -365,8 +408,6 @@ cross.validation <- function(predict.data, true.data) {
     print('')
   })
 }
-
-cv.predict <- assemble.predict(cv.test)
 ```
 
 ```{r 'Cross validation'}
