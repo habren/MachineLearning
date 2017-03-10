@@ -180,10 +180,12 @@ ggplot(data = full[1:nrow(train),], mapping = aes(x = factor(Embarked), y = ..co
 
 
 ```{r cache=TRUE}
-df <- data.frame(Fare <- sapply(full$Fare[1:nrow(train)], FUN=function(x){if(x<20){" 0-20"} else if (x < 40) {" 20-40"} else if(x<60){" 40-60"} else if(x < 80){" 60-80"} else if (x< 100){" 80-100"}else if(x < 200){"100-200"} else if(x < 300) {"200-300"} else if (x<400){"300-400"} else {"400-10000"}}), Survived <- full$Survived[1:nrow(train)])
+df <- data.frame(Survived = full$Survived[1:nrow(train)])
+df$Fare <- cut(full$Fare[1:nrow(train)], c(0, 20, 40, 60, 80, 100, 200, 300, 400, 1000), include.lowest = TRUE, right = FALSE)
 ggplot(data = df, mapping = aes(x = factor(Fare), y = ..count.., fill=factor(Survived))) + geom_bar(stat = "count", position='dodge') + labs(title = "How Fare impact survivor", x = "Fare", y = "Count", fill = "Survived")
 WOETable(X=df$Fare, Y=df$Survived)
 IV(X=df$Fare, Y=df$Survived)
+rm(df)
 ```
 
 
@@ -192,27 +194,19 @@ IV(X=df$Fare, Y=df$Survived)
 
 
 ```{r cache=TRUE}
-df <- data.frame(Fare <- sapply(full$Fare[1:nrow(train)], FUN=function(x){if(x<10){" 0-10"} else if (x < 20) {" 10-20"} else if(x<30){" 20-30"} else if(x < 40){" 30-40"} else if(x<50){" 40-50"} else if(x < 60){" 50-60"} else if(x<70){" 60-70"} else if(x < 80){" 70-80"} else if(x<90){" 80-90"} else if (x< 100){" 80-100"}else if(x < 200){"100-200"} else if(x < 300) {"200-300"} else if (x<400){"300-400"} else {"400-10000"}}), Survived <- full$Survived[1:nrow(train)])
+df <- data.frame(Survived = full$Survived[1:nrow(train)])
+df$Fare <- cut(full$Fare[1:nrow(train)], c(0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 200, 300, 400, 1000), include.lowest = TRUE, right = FALSE)
 ggplot(data = df, mapping = aes(x = factor(Fare), y = ..count.., fill=factor(Survived))) + geom_bar(stat = "count", position='dodge') + labs(title = "How Fare impact survivor", x = "Fare", y = "Count", fill = "Survived")
 WOETable(X=df$Fare, Y=df$Survived)
 IV(X=df$Fare, Y=df$Survived)
+rm(df)
 ```
+
 
 
 ```{r results='hide'}
-full$Fare <- as.factor(sapply(full$Fare, FUN=function(x){if(x<10){" 0-10"} else if (x < 20) {" 10-20"} else if(x<30){" 20-30"} else if(x < 40){" 30-40"} else if(x<50){" 40-50"} else if(x < 60){" 50-60"} else if(x<70){" 60-70"} else if(x < 80){" 70-80"} else if(x<90){" 80-90"} else if (x< 100){" 90-100"}else if(x < 200){"100-200"} else if(x < 300) {"200-300"} else if (x<400){"300-400"} else {"400-10000"}}))
+full$Fare <- cut(full$Fare, c(0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 200, 300, 400, 1000), include.lowest = TRUE, right = FALSE)
 ```
-
-
-
-
-
-
-
-
-
-
-
 
 
 
