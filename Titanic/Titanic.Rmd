@@ -341,34 +341,32 @@ svmmodel <- svm(formula=model.formula, data=train.data)
 citmodel <- cforest(formula=model.formula, data=train.data, controls=cforest_unbiased(ntree=2000, mtry=3))
 
 
-# gbmmodel <- gbm(
-#                 #formula = model.formula,
-#                 Result ~ Age + Fare + Cabin + Embarked + Pclass + Sex + Family + Title + Mother,
-#                 data = train.data,
-#                 distribution = "adaboost",
-#                 interaction.depth = 5,
-#                 n.trees = 2000,
-#                 shrinkage = 0.001,
-#                 bag.fraction = 0.8,
-#                 n.cores = 8,
-#                 verbose = FALSE)
-# 
-# gbm.predict <- predict.gbm(gbmmodel, newdata=cv.test, n.trees = 2000)
-# print('***************head*******************')
-# head(gbm.predict, 20)
+gbmmodel <- gbm(
+                Result ~ Age + Fare + Cabin + Embarked + Pclass + Sex + Family + Title + Mother,
+                data = train.data,
+                distribution = "adaboost",
+                interaction.depth = 5,
+                n.trees = 8000,
+                shrinkage = 0.001,
+                bag.fraction = 0.8,
+                n.cores = 8,
+                cv.folds = 5,
+                verbose = FALSE)
+gbm.perf(gbmmodel)
+gbm.predict <- predict.gbm(gbmmodel, newdata=cv.test, n.trees = 2564)
 
 summary(lrmodel)
 summary(rfmodel)
 summary(svmmodel)
 summary(citmodel)
 #summary(xgbmodel)
-#summary(gbmmodel)
+summary(gbmmodel)
 print(lrmodel)
 print(rfmodel)
 print(svmmodel)
 print(citmodel)
 #print(xgbmodel)
-#print(gbmmodel)
+print(gbmmodel)
 
 
 ```
@@ -380,13 +378,14 @@ assemble.predict <- function(data) {
   rf.predict <- predict(rfmodel, newdata=data, type="response")
   svm.predict <- predict(svmmodel, newdata=data, type="response")
   cit.predict <- factor(predict(citmodel, newdata=data, type="response"), levels=c(0, 1))
+  gbm.predict <- factor(ifelse(predict(gbmmodel, newdata=data, type="response", n.trees = 2564) > 0.5, 1, 0), levels=c(0, 1))
 
 
 
-  assemble.result <- as.integer(lr.predict) + as.integer(rf.predict) + as.integer(svm.predict) + as.integer(cit.predict)
-  assemble.result <- ifelse(assemble.result >= 6 , 1, 0)
+  assemble.result <- as.integer(lr.predict) + as.integer(rf.predict) + as.integer(svm.predict) + as.integer(cit.predict) + as.integer(gbm.predict)
+  assemble.result <- ifelse(assemble.result >= 8 , 1, 0)
 
-  return(data.frame(LinearRegression=lr.predict, RandomForest=rf.predict, SVM=svm.predict, CIT=cit.predict, Ensemble=assemble.result))
+  return(data.frame(LinearRegression=lr.predict, RandomForest=rf.predict, SVM=svm.predict, CIT=cit.predict, GBM=gbm.predict, Ensemble=assemble.result))
 }
 ```
 
