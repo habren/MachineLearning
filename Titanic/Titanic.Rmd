@@ -59,7 +59,7 @@ full$Fare[is.na(full$Fare)] <- median(full$Fare[!is.na(full$Fare)])
 full$Title <- gsub('(.*, )|(\\..*)', '', full$Name)
 full$Title[full$Title %in% c('Mlle', 'Ms', 'Lady')] <- 'Miss'
 full$Title[full$Title %in% c('Mme', 'the Countess', 'Dona')] <- 'Mrs'
-full$Title[full$Title %in% c('Mr', 'Capt', 'Major', 'Col', 'Don', 'Sir', 'Jonkheer', 'Rev')] <- 'Mr'
+full$Title[full$Title %in% c('Mr', 'Capt', 'Major', 'Col', 'Don', 'Jonkheer')] <- 'Mr'
 full$Title <- as.factor(full$Title)
 ```
 
@@ -176,7 +176,31 @@ ggplot(data = full[1:nrow(train),], mapping = aes(x = factor(Embarked), y = ..co
 
 
 
+```{r}
+ticket.count <- aggregate(full$Ticket, by = list(full$Ticket), function(x) sum(!is.na(x)))
+pclass.midean.fare <- aggregate(full$Fare, by = list(full$Pclass), FUN = function(x) median(x, na.rm = T))
 
+full$Fare <- apply(full, 1, function(x) as.numeric(x['Fare']) / ticket.count[which(ticket.count[, 1] == x['Ticket']), 2])
+
+full$Fare[which(full$Fare == 0)] <- apply(full[which(full$Fare == 0), ], 1, FUN = function(x) pclass.midean.fare[pclass.midean.fare[, 1] == x['Pclass'], 2])
+
+full$TicketCount <- apply(full, 1, function(x) ticket.count[which(ticket.count[, 1] == x['Ticket']), 2])
+
+ggplot(data = full[1:nrow(train),], mapping = aes(x = factor(TicketCount), y = ..count.., fill=factor(Survived))) + geom_bar(stat = "count", position='dodge') + labs(title = "How TicketCount impact survivor", x = "TicketCount", y = "Count", fill = "Survived")
+
+WOETable(X=full$TicketCount[1:nrow(train)], Y=full$Survived[1:nrow(train)])
+IV(X=full$TicketCount[1:nrow(train)], Y=full$Survived[1:nrow(train)])
+
+
+```
+
+```{r}
+# full$TicketCount <- factor(sapply(full$TicketCount, function(x) ifelse(x >=2, 'TRUE', 'FALSE')))
+# ggplot(data = full[1:nrow(train),], mapping = aes(x = factor(TicketCount), y = ..count.., fill=factor(Survived))) + geom_bar(stat = "count", position='dodge') + labs(title = "How TicketCount impact survivor", x = "TicketCount", y = "Count", fill = "Survived")
+# 
+# WOETable(X=full$TicketCount[1:nrow(train)], Y=full$Survived[1:nrow(train)])
+# IV(X=full$TicketCount[1:nrow(train)], Y=full$Survived[1:nrow(train)])
+```
 
 
 ```{r cache=TRUE}
@@ -205,7 +229,7 @@ rm(df)
 
 
 ```{r results='hide'}
-full$Fare <- cut(full$Fare, c(0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 200, 300, 400, 1000), include.lowest = TRUE, right = FALSE)
+#full$Fare <- cut(full$Fare, c(0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 200, 300, 400, 1000), include.lowest = TRUE, right = FALSE)
 ```
 
 
@@ -267,8 +291,8 @@ IV(X=df$Family, Y=df$Survived)
 
 
 # ```{r}
-# age.model <- rpart(Age ~ Pclass + Sex + SibSp + Parch + Fare + Embarked + Title + Family, data=full[!is.na(full$Age), ], method='anova')
-# full$Age[is.na(full$Age)] <- predict(age.model, full[is.na(full$Age), ])
+#age.model <- rpart(Age ~ Pclass + Sex + SibSp + Parch + Fare + Embarked + Title + Family, data=full[!is.na(full$Age), ], method='anova')
+#full$Age[is.na(full$Age)] <- predict(age.model, full[is.na(full$Age), ])
 # ```
 
 
@@ -313,7 +337,7 @@ full$Age <- as.factor(sapply(full$Age, function(x){if(is.na(x)){" N-A"} else if(
 
 ```{r}
 set.seed(256)
-cv.train.sample <- sample(1:nrow(train), as.integer(0.8 * nrow(train)), replace = TRUE)
+cv.train.sample <- sample(1:nrow(train), as.integer(0.5 * nrow(train)), replace = TRUE)
 cv.train <- full[cv.train.sample,]
 cv.test <- full[1:nrow(train),][-cv.train.sample,]
 cv.test_true <- full$Survived[1:nrow(train)][-cv.train.sample]
@@ -327,7 +351,7 @@ full$Result <- as.integer(full$Result) - 1
 
 train.data <- full[1:nrow(train),]
 
-model.features <- c('Age', 'Fare', 'Cabin', 'Embarked', 'Pclass', 'Sex', 'Family', 'Title', 'Mother')
+model.features <- c('Age', 'Fare', 'Cabin', 'Embarked', 'Pclass', 'Sex', 'Family', 'Title', 'Mother', 'TicketCount')
 model.formula <- as.formula(paste('Survived ~ ', paste(model.features, collapse=' + ')))
 
 
@@ -338,7 +362,7 @@ plot(rfmodel)
 
 svmmodel <- svm(formula=model.formula, data=train.data)
 
-citmodel <- cforest(formula=model.formula, data=train.data, controls=cforest_unbiased(ntree=2000, mtry=3))
+citmodel <- cforest(formula=model.formula, data=train.data, controls=cforest_unbiased(ntree=1000, mtry=3))
 
 
 gbmmodel <- gbm(
@@ -353,19 +377,22 @@ gbmmodel <- gbm(
                 cv.folds = 5,
                 verbose = FALSE)
 gbm.perf(gbmmodel)
-gbm.predict <- predict.gbm(gbmmodel, newdata=cv.test, n.trees = 2564)
+
+
+
+
+
 
 summary(lrmodel)
 summary(rfmodel)
 summary(svmmodel)
 summary(citmodel)
-#summary(xgbmodel)
 summary(gbmmodel)
+
 print(lrmodel)
 print(rfmodel)
 print(svmmodel)
 print(citmodel)
-#print(xgbmodel)
 print(gbmmodel)
 
 
@@ -374,18 +401,20 @@ print(gbmmodel)
 
 ```{r 'Definition of assemble predict function'}
 assemble.predict <- function(data) {
-  lr.predict <- factor(ifelse(predict(lrmodel, newdata=data, type="response") > 0.5, 1, 0), levels=c(0, 1))
-  rf.predict <- predict(rfmodel, newdata=data, type="response")
-  svm.predict <- predict(svmmodel, newdata=data, type="response")
-  cit.predict <- factor(predict(citmodel, newdata=data, type="response"), levels=c(0, 1))
-  gbm.predict <- factor(ifelse(predict(gbmmodel, newdata=data, type="response", n.trees = 2564) > 0.5, 1, 0), levels=c(0, 1))
+  assemble.result <- data.frame(Dummy = rep(0, nrow(data)))
+  
+  assemble.result$LinearRegression <- factor((ifelse(predict(lrmodel, newdata=data, type="response") > 0.5, 1, 0)), levels = c(0, 1))
+  assemble.result$RandomForest <- predict(rfmodel, newdata=data, type="response", ntree = 2000)
+  assemble.result$SVM <- predict(svmmodel, newdata=data, type="response")
+  assemble.result$CIT <- predict(citmodel, newdata=data, type="response")
+  assemble.result$GBM <- factor(ifelse(predict(gbmmodel, newdata=data, type="response", n.trees = 2564) > 0.5, 1, 0), levels = c(0, 1))
 
+  
+  assemble.result <- assemble.result[, -1]
+  threshold <- as.integer((ncol(assemble.result) + 1)/2)
+  assemble.result$Ensemble <- factor(apply(assemble.result, 1, FUN = function(x) ifelse(sum(as.integer(x)) >= threshold, 1, 0)), levels = c(0, 1))
 
-
-  assemble.result <- as.integer(lr.predict) + as.integer(rf.predict) + as.integer(svm.predict) + as.integer(cit.predict) + as.integer(gbm.predict)
-  assemble.result <- ifelse(assemble.result >= 8 , 1, 0)
-
-  return(data.frame(LinearRegression=lr.predict, RandomForest=rf.predict, SVM=svm.predict, CIT=cit.predict, GBM=gbm.predict, Ensemble=assemble.result))
+  return(assemble.result)
 }
 ```
 
@@ -413,8 +442,9 @@ cross.validation(cv.predict, cv.test_true)
 test.data <- full[(nrow(train)+1):(nrow(train)+nrow(test)), model.features]
 test.predict <- assemble.predict(test.data)
 
-test.result <- data.frame(full$PassengerId[(nrow(train)+1):(nrow(full))], Survived=test.predict$RandomForest)
+test.result <- data.frame(full$PassengerId[(nrow(train)+1):(nrow(full))], Survived=test.predict$RPart)
 colnames(test.result) <- c('PassengerId', 'Survived')
+head(test.result, 10)
 ```
 
 ```{r 'Predict result saving'}
