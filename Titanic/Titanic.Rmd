@@ -378,7 +378,9 @@ gbmmodel <- gbm(
                 verbose = FALSE)
 gbm.perf(gbmmodel)
 
-
+rpartmodel <- rpart(model.formula,
+             data = train.data,
+             method = "class")
 
 
 
@@ -388,12 +390,14 @@ summary(rfmodel)
 summary(svmmodel)
 summary(citmodel)
 summary(gbmmodel)
+summary(rpartmodel)
 
 print(lrmodel)
 print(rfmodel)
 print(svmmodel)
 print(citmodel)
 print(gbmmodel)
+print(rpartmodel)
 
 
 ```
@@ -408,7 +412,7 @@ assemble.predict <- function(data) {
   assemble.result$SVM <- predict(svmmodel, newdata=data, type="response")
   assemble.result$CIT <- predict(citmodel, newdata=data, type="response")
   assemble.result$GBM <- factor(ifelse(predict(gbmmodel, newdata=data, type="response", n.trees = 2564) > 0.5, 1, 0), levels = c(0, 1))
-
+  assemble.result$RPart <- predict(rpartmodel, newdata=data, type = "class")
   
   assemble.result <- assemble.result[, -1]
   threshold <- as.integer((ncol(assemble.result) + 1)/2)
