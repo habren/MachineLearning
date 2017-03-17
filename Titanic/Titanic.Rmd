@@ -383,8 +383,6 @@ rpartmodel <- rpart(model.formula,
              method = "class")
 
 
-
-
 summary(lrmodel)
 summary(rfmodel)
 summary(svmmodel)
@@ -446,13 +444,14 @@ cross.validation(cv.predict, cv.test_true)
 test.data <- full[(nrow(train)+1):(nrow(train)+nrow(test)), model.features]
 test.predict <- assemble.predict(test.data)
 
-test.result <- data.frame(full$PassengerId[(nrow(train)+1):(nrow(full))], Survived=test.predict$RPart)
-colnames(test.result) <- c('PassengerId', 'Survived')
-head(test.result, 10)
+test.result <- cbind(full$PassengerId[(nrow(train)+1):(nrow(full))], test.predict)
 ```
 
-```{r 'Predict result saving'}
-write.csv(test.result, file="result.csv", row.names=FALSE, quote=FALSE)
+```{r 'Predicted result saving'}
+for (name in colnames(test.result[, -1])) {
+  output.data <- data.frame(PassengerId = test.result[, 1], Survived = test.result[[name]])
+  write.csv(output.data, file=paste('result/', name, '.result.csv', sep = ''), row.names = FALSE, quote = FALSE)
+}
 ```
 
 
