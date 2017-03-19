@@ -1,30 +1,32 @@
 ---
-title: "Titanic suvivor prediction"
+title: "机器学习（二） 如何做到Kaggle排名前2%"
 output:
-  html_document: 
-    toc: true
-    toc_float: false
-  pdf_document: default
+  html_document:
   md_document:
-    variant:
-      markdown_github
-  revealjs::revealjs_presentation: 
-    theme: league
+    variant: markdown_strict+backtick_code_blocks+autolink_bare_uriss
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
+
+# ```{r setup, include=FALSE}
+# knitr::opts_chunk$set(echo = TRUE)
+# ```
 
 
+>原创文章，转载请务必将下面这段话置于文章开头处。  
+>本文转发自[**Jason's Blog**](http://www.jasongj.com)，[原文链接](http://www.jasongj.com/ml/kaggle/)　[http://www.jasongj.com/ml/kaggle/](http://www.jasongj.com/ml/kaggle/)
 
+# 摘要
+本文结合在Kaggle平台上，在Titanic幸存预测项比赛上取得前2%排名的经历，分析了如何完成一次机器学习项目。
 
-## 
+# 竞赛内容介绍
+[Titanic生存预测](https://www.kaggle.com/c/titanic)是Kaggle上参赛人数最多的竞赛之一。它要求参赛选手通过训练数据集分析出什么类型的人更可能幸存，并预测出测试数据集中的所有乘客是否生还。  
+  
+该项目是一个二元分类问题
 
-## 加载训练数据集
-通过如下代码加载训练数据集并存于train中
-
-```{r "Loading necessary libraries", echo=FALSE, results='hide', message=FALSE}
+# 如何取得排名前2%的成绩
+## 加载数据
+在加载数据之前，先通过如下代码加载之后会用到的所有R库
+```{r "Loading necessary libraries", echo=TRUE, results='hide', message=FALSE}
 library(readr) # File read / write
 library(ggplot2) # Data visualization
 library(ggthemes) # Data visualization
@@ -41,425 +43,440 @@ library(Amelia) # Missing value utils
 library(party) # Conditional inference trees
 library(gbm) # AdaBoost
 library(class) # KNN
-```
-
-
-```{r echo=TRUE, results='hide', message=FALSE, cache=TRUE}
+library(scales)
+```  
+  
+通过如下代码将训练数据和测试数据分别加载到名为train和test的data.frame中
+```{r 'Loading data', echo=TRUE, results='hide', message=FALSE, cache=TRUE}
 train <- read_csv("train.csv")
 test <- read_csv("test.csv")
-full <- bind_rows(train, test)
-train.records <- nrow(train)
-full$Fare[is.na(full$Fare)] <- median(full$Fare[!is.na(full$Fare)])
-```
-
-
-
-
-```{r}
-full$Title <- gsub('(.*, )|(\\..*)', '', full$Name)
-full$Title[full$Title %in% c('Mlle', 'Ms', 'Lady')] <- 'Miss'
-full$Title[full$Title %in% c('Mme', 'the Countess', 'Dona')] <- 'Mrs'
-full$Title[full$Title %in% c('Mr', 'Capt', 'Major', 'Col', 'Don', 'Jonkheer')] <- 'Mr'
-full$Title <- as.factor(full$Title)
-```
-
-
-```{r cache=TRUE}
-ggplot(data = full[1:nrow(train),], mapping = aes(x = Title, y = ..count.., fill=factor(Survived))) + geom_bar(stat = "count", position='dodge') + labs(title = "How Title impact survivor", x = "Title", y = "Count", fill = "Survived")
-WOETable(X=full$Title[1:nrow(train)], Y=full$Survived[1:nrow(train)])
-IV(X=full$Title[1:nrow(train)], Y=full$Survived[1:nrow(train)])
-```
-
-
-
-
-```{r}
-full$Mother <- 'Non-mother'
-full$Mother[as.integer(full$Age) > 20 & (!full$Title %in% c('Mr','Miss')) & as.integer(full$Parch) > 0] <- 'Mother'
-full$Mother <- as.factor(full$Mother)
-
-ggplot(data = full[1:nrow(train),], mapping = aes(x = factor(Mother), y = ..count.., fill=factor(Survived))) + geom_bar(stat = "count", position='dodge') + labs(title = "How Mother impact survivor", x = "Mother", y = "Count", fill = "Survived")
-WOETable(X=full$Mother[1:nrow(train)], Y=full$Survived[1:nrow(train)])
-IV(X=full$Mother[1:nrow(train)], Y=full$Survived[1:nrow(train)])
-```
-
-
-
-
-
-
-
-```{r cache=TRUE}
-ggplot(data = full[1:nrow(train),], mapping = aes(x = factor(Pclass), y = ..count.., fill=factor(Survived))) + geom_bar(stat = 'count', width = 0.5, position = position_dodge(1)) + labs(title = "How Pclass impact survivor", x = "Pclass", y = "Count", fill = "Survived")
-WOETable(X=factor(full$Pclass[1:nrow(train)]), Y=full$Survived[1:nrow(train)])
-IV(X=factor(full$Pclass[1:nrow(train)]), Y=full$Survived[1:nrow(train)])
-```
-
-
-
-
-
-
-```{r results='hide'}
-full$Pclass <- as.factor(full$Pclass)
-full$Sex <- as.factor(full$Sex)
-full$Survived <- as.factor(full$Survived)
-```
-
-
-
-
-
-
-```{r cache=TRUE}
-ggplot(data = full[1:nrow(train),], mapping = aes(x = factor(Sex), y = ..count.., fill=factor(Survived))) + geom_bar(stat = 'count', position='dodge') + labs(title = "How Sex impact survivor", x = "Sex", y = "Count", fill = "Survived")
-WOETable(X=factor(full$Sex[1:nrow(train)]), Y=full$Survived[1:nrow(train)])
-IV(X=factor(full$Sex[1:nrow(train)]), Y=full$Survived[1:nrow(train)])
-```
-
-
-
-
-
-```{r cache=TRUE}
-ggplot(data = full[1:nrow(train),], mapping = aes(x = factor(SibSp), y = ..count.., fill=factor(Survived))) + geom_bar(stat = 'count', position='dodge') + labs(title = "How SibSp impact survivor", x = "Sibsp", y = "Count", fill = "Survived")
-WOETable(X=factor(full$SibSp[1:nrow(train)]), Y=full$Survived[1:nrow(train)])
-IV(X=factor(full$SibSp[1:nrow(train)]), Y=full$Survived[1:nrow(train)])
-```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-```{r cache=TRUE}
-ggplot(data = full[1:nrow(train),], aes(x = Fare, color=factor(Survived))) + geom_line(aes(file=..count..), stat = 'bin', binwidth=100)  + labs(title = "How Fare impace survivor", x = "Fare", y = "Count", fill = "Survived")
-```
-
-
-
-
-
-```{r cache=TRUE}
-missing.embarked <- full[is.na(full$Embarked),]
-missing.embarked[c('Pclass', 'Fare', 'Embarked')]
-ggplot(full[!is.na(full$Embarked),], aes(x=Embarked, y=Fare, fill=factor(Pclass))) + geom_boxplot() + geom_hline(aes(yintercept=80), color='red', linetype='dashed', lwd=2) + scale_y_continuous(labels=dollar_format()) + theme_few()
-```
-
-
-
-从上图可知缺失Embark信息的两名乘客的Fare为$80，Pclass为1。而Fare为$80，Pclass为1的乘客最有可能从'C'登船，因此这里将缺失Embark信息的两名乘客的Embark设置为'C'
-
-
-```{r}
-full$Embarked[is.na(full$Embarked)] <- 'C'
-full$Embarked <- as.factor(full$Embarked)
-```
-
-
-
-
-
-
-```{r cache=TRUE}
-ggplot(data = full[1:nrow(train),], mapping = aes(x = factor(Embarked), y = ..count.., fill=factor(Survived))) + geom_bar(stat = "count", position='dodge') + labs(title = "How Pclass impact survivor", x = "Embarked", y = "Count", fill = "Survived")
-```
-
-
-
-
-```{r}
-ticket.count <- aggregate(full$Ticket, by = list(full$Ticket), function(x) sum(!is.na(x)))
-pclass.midean.fare <- aggregate(full$Fare, by = list(full$Pclass), FUN = function(x) median(x, na.rm = T))
-
-full$Fare <- apply(full, 1, function(x) as.numeric(x['Fare']) / ticket.count[which(ticket.count[, 1] == x['Ticket']), 2])
-
-full$Fare[which(full$Fare == 0)] <- apply(full[which(full$Fare == 0), ], 1, FUN = function(x) pclass.midean.fare[pclass.midean.fare[, 1] == x['Pclass'], 2])
-
-full$TicketCount <- apply(full, 1, function(x) ticket.count[which(ticket.count[, 1] == x['Ticket']), 2])
-
-ggplot(data = full[1:nrow(train),], mapping = aes(x = factor(TicketCount), y = ..count.., fill=factor(Survived))) + geom_bar(stat = "count", position='dodge') + labs(title = "How TicketCount impact survivor", x = "TicketCount", y = "Count", fill = "Survived")
-
-WOETable(X=full$TicketCount[1:nrow(train)], Y=full$Survived[1:nrow(train)])
-IV(X=full$TicketCount[1:nrow(train)], Y=full$Survived[1:nrow(train)])
-
-
-```
-
-```{r}
-# full$TicketCount <- factor(sapply(full$TicketCount, function(x) ifelse(x >=2, 'TRUE', 'FALSE')))
-# ggplot(data = full[1:nrow(train),], mapping = aes(x = factor(TicketCount), y = ..count.., fill=factor(Survived))) + geom_bar(stat = "count", position='dodge') + labs(title = "How TicketCount impact survivor", x = "TicketCount", y = "Count", fill = "Survived")
-# 
-# WOETable(X=full$TicketCount[1:nrow(train)], Y=full$Survived[1:nrow(train)])
-# IV(X=full$TicketCount[1:nrow(train)], Y=full$Survived[1:nrow(train)])
-```
-
-
-```{r cache=TRUE}
-df <- data.frame(Survived = full$Survived[1:nrow(train)])
-df$Fare <- cut(full$Fare[1:nrow(train)], c(0, 20, 40, 60, 80, 100, 200, 300, 400, 1000), include.lowest = TRUE, right = FALSE)
-ggplot(data = df, mapping = aes(x = factor(Fare), y = ..count.., fill=factor(Survived))) + geom_bar(stat = "count", position='dodge') + labs(title = "How Fare impact survivor", x = "Fare", y = "Count", fill = "Survived")
-WOETable(X=df$Fare, Y=df$Survived)
-IV(X=df$Fare, Y=df$Survived)
-rm(df)
-```
-
-
-
-
-
-
-```{r cache=TRUE}
-df <- data.frame(Survived = full$Survived[1:nrow(train)])
-df$Fare <- cut(full$Fare[1:nrow(train)], c(0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 200, 300, 400, 1000), include.lowest = TRUE, right = FALSE)
-ggplot(data = df, mapping = aes(x = factor(Fare), y = ..count.., fill=factor(Survived))) + geom_bar(stat = "count", position='dodge') + labs(title = "How Fare impact survivor", x = "Fare", y = "Count", fill = "Survived")
-WOETable(X=df$Fare, Y=df$Survived)
-IV(X=df$Fare, Y=df$Survived)
-rm(df)
-```
-
-
-
-```{r results='hide'}
-#full$Fare <- cut(full$Fare, c(0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 200, 300, 400, 1000), include.lowest = TRUE, right = FALSE)
-```
-
-
-
-```{r cache=TRUE}
-df <- data.frame(Cabin <- sapply(full$Cabin[1:nrow(train)], FUN=function(x){ifelse(is.na(x), "X", "Y")}), Survived <- full$Survived[1:nrow(train)])
-ggplot(data = df, mapping = aes(x = factor(Cabin), y = ..count.., fill=factor(Survived))) + geom_bar(stat = "count", position='dodge') + labs(title = "How Cabin impact survivor", x = "Cabin", y = "Count", fill = "Survived")
-WOETable(X=df$Cabin, Y=df$Survived)
-IV(X=df$Cabin, Y=df$Survived)
-```
-
-
-
-
-```{r cache=TRUE}
-df <- data.frame(Cabin <- sapply(full$Cabin[1:nrow(train)], FUN=function(x){ifelse(is.na(x), "X", str_sub(x, start=1, end=1))}), Survived <- full$Survived[1:nrow(train)])
-ggplot(data = df, mapping = aes(x = factor(Cabin), y = ..count.., fill=factor(Survived))) + geom_bar(stat = "count", position='dodge') + labs(title = "How Cabin impact survivor", x = "Cabin", y = "Count", fill = "Survived")
-WOETable(X=df$Cabin, Y=df$Survived)
-IV(X=df$Cabin, Y=df$Survived)
-```
-
-
-
-```{r results='hide'}
-full$Cabin <- as.factor(sapply(full$Cabin, FUN=function(x){ifelse(is.na(x), "X", str_sub(x, start=1, end=1))}))
-```
-
-
-
-
-
-
-
-
-
-```{r results='hide'}
-full$Family <- as.factor(full$SibSp + full$Parch)
-```
-
-
-```{r cache=TRUE}
-ggplot(data = full[1:nrow(train),], mapping = aes(x = factor(Family), y = ..count.., fill=factor(Survived))) + geom_bar(stat = "count", position='dodge') + labs(title = "How Family impact survivor", x = "Family", y = "Count", fill = "Survived")
-WOETable(X=full$Family[1:nrow(train)], Y=full$Survived[1:nrow(train)])
-IV(X=full$Family[1:nrow(train)], Y=full$Survived[1:nrow(train)])
-```
-
-
-
-
-```{r cache=TRUE}
-df <- data.frame(Family=sapply(full$Family[1:nrow(train)], function(x){if(as.integer(x)<=1){'Singleton'} else if(as.integer(x) < 4){'small'} else {'large'}}), Survived=full$Survived[1:nrow(train)])
-ggplot(data = df, mapping = aes(x = factor(Family), y = ..count.., fill=factor(Survived))) + geom_bar(stat = "count", position='dodge') + labs(title = "How Family impact survivor", x = "Family", y = "Count", fill = "Survived")
-WOETable(X=df$Family, Y=df$Survived)
-IV(X=df$Family, Y=df$Survived)
-```
-
-
-
-
-
-# ```{r}
-#age.model <- rpart(Age ~ Pclass + Sex + SibSp + Parch + Fare + Embarked + Title + Family, data=full[!is.na(full$Age), ], method='anova')
-#full$Age[is.na(full$Age)] <- predict(age.model, full[is.na(full$Age), ])
-# ```
-
-
-
-
-
-```{r cache=TRUE}
-ggplot(data = full[1:nrow(train),], aes(x = sapply(full$Age[1:nrow(train)], function(x){ifelse(is.na(x), 100, x)}), color=factor(Survived))) + geom_line(aes(file=..count..), stat = 'bin', binwidth=3)  + labs(title = "How Age impact survivor", x = "Age", y = "Count", fill = "Survived")
-```
-
-
-
-
-
-```{r cache=TRUE}
-df <- data.frame(Age <- sapply(full$Age[1:nrow(train)], FUN=function(x){if(is.na(x)){" NA"} else if(x < 15){"0-15"} else if (x < 35) {" 15-35"} else if(x < 60) {" 35-60"}  else {"60"}}), Survived <- full$Survived[1:nrow(train)])
-ggplot(data = df, mapping = aes(x = factor(Age), y = ..count.., fill=factor(Survived))) + geom_bar(stat = "count", position='dodge') + labs(title = "How Age impact survivor", x = "Age", y = "Count", fill = "Survived")
-WOETable(X=df$Age, Y=df$Survived)
-IV(X=df$Age, Y=df$Survived)
-```
-
-
-
-
-
-```{r cache=TRUE}
-df <- data.frame(Age <- sapply(full$Age[1:nrow(train)], FUN=function(x){if((!is.na(x)) && (x<18)){"teenager"} else {"adult"}}), Survived <- full$Survived[1:nrow(train)])
-ggplot(data = df, mapping = aes(x = factor(Age), y = ..count.., fill=factor(Survived))) + geom_bar(stat = "count", position='dodge') + labs(title = "How Age impact survivor", x = "Age", y = "Count", fill = "Survived")
-WOETable(X=df$Age, Y=df$Survived)
-IV(X=df$Age, Y=df$Survived)
-```
-
-
-
-```{r}
-full$Age <- as.factor(sapply(full$Age, function(x){if(is.na(x)){" N-A"} else if(x < 15){"0-15"} else if (x < 35) {" 15-35"} else if(x < 60) {" 35-60"}  else {"old"}}))
-```
-
-
-
-
-
-```{r}
-set.seed(256)
-cv.train.sample <- sample(1:nrow(train), as.integer(0.5 * nrow(train)), replace = TRUE)
-cv.train <- full[cv.train.sample,]
-cv.test <- full[1:nrow(train),][-cv.train.sample,]
-cv.test_true <- full$Survived[1:nrow(train)][-cv.train.sample]
-```
-
-
-```{r "training model"}
-full$Result <- full$Survived
-levels(full$Result) <- c(0, 1)
-full$Result <- as.integer(full$Result) - 1
-
-train.data <- full[1:nrow(train),]
-
-model.features <- c('Age', 'Fare', 'Cabin', 'Embarked', 'Pclass', 'Sex', 'Family', 'Title', 'Mother', 'TicketCount')
-model.formula <- as.formula(paste('Survived ~ ', paste(model.features, collapse=' + ')))
-
-
-lrmodel <- glm(formula=model.formula, data=train.data, family=binomial)
-
-rfmodel <- randomForest(formula=model.formula, data=train.data, ntree=2000)
-plot(rfmodel)
-
-svmmodel <- svm(formula=model.formula, data=train.data)
-
-citmodel <- cforest(formula=model.formula, data=train.data, controls=cforest_unbiased(ntree=1000, mtry=3))
-
-
-gbmmodel <- gbm(
-                Result ~ Age + Fare + Cabin + Embarked + Pclass + Sex + Family + Title + Mother,
-                data = train.data,
-                distribution = "adaboost",
-                interaction.depth = 5,
-                n.trees = 8000,
-                shrinkage = 0.001,
-                bag.fraction = 0.8,
-                n.cores = 8,
-                cv.folds = 5,
-                verbose = FALSE)
-gbm.perf(gbmmodel)
-
-rpartmodel <- rpart(model.formula,
-             data = train.data,
-             method = "class")
-
-
-summary(lrmodel)
-summary(rfmodel)
-summary(svmmodel)
-summary(citmodel)
-summary(gbmmodel)
-summary(rpartmodel)
-
-print(lrmodel)
-print(rfmodel)
-print(svmmodel)
-print(citmodel)
-print(gbmmodel)
-print(rpartmodel)
-
-
-```
-
-
-```{r 'Definition of assemble predict function'}
-assemble.predict <- function(data) {
-  assemble.result <- data.frame(Dummy = rep(0, nrow(data)))
+```  
   
-  assemble.result$LinearRegression <- factor((ifelse(predict(lrmodel, newdata=data, type="response") > 0.5, 1, 0)), levels = c(0, 1))
-  assemble.result$RandomForest <- predict(rfmodel, newdata=data, type="response", ntree = 2000)
-  assemble.result$SVM <- predict(svmmodel, newdata=data, type="response")
-  assemble.result$CIT <- predict(citmodel, newdata=data, type="response")
-  assemble.result$GBM <- factor(ifelse(predict(gbmmodel, newdata=data, type="response", n.trees = 2564) > 0.5, 1, 0), levels = c(0, 1))
-  assemble.result$RPart <- predict(rpartmodel, newdata=data, type = "class")
+之后由于需要对训练数据和测试做相同的转换，为避免重复操作和出现不一至的情况，更为了避免可能碰到的categorical类型新level的问题，这里建议将训练数据和测试数据合并，统一操作。
+```{r 'Merge training data and test data', echo=TRUE, results='hide', message=FALSE}
+data <- bind_rows(train, test)
+train.row <- 1:nrow(train)
+test.row <- (1 + nrow(train)):(nrow(train) + nrow(test))
+```
+
+## 数据预览
+先观察数据
+```{r 'Preview data set', cache=TRUE}
+str(data)
+```
   
-  assemble.result <- assemble.result[, -1]
-  threshold <- as.integer((ncol(assemble.result) + 1)/2)
-  assemble.result$Ensemble <- factor(apply(assemble.result, 1, FUN = function(x) ifelse(sum(as.integer(x)) >= threshold, 1, 0)), levels = c(0, 1))
+从上可见，数据集包含12个变量，1309条数据，其中891条为训练数据，418条为测试数据  
+  
+ - PassengerId 整型变量，标识乘客的ID，递增变量，对预测无帮助
+ - Survived 整型变量，标识该乘客是否幸存。0表示遇难，1表示幸存。将其转换为factor变量比较方便处理
+ - Pclass 整型变量，标识乘客的社会-经济状态，1代表Upper，2代表Middle，3代表Lower
+ - Name 字符型变量，除包含姓和名以外，还包含Mr. Mrs. Dr.这样的具有西方文化特点的信息
+ - Sex 字符型变量，标识乘客性别，适合转换为factor类型变量
+ - Age 整型变量，标识乘客年龄，有缺失值
+ - SibSp 整型变量，代表兄弟姐妹及配偶的个数。其中Sib代表Sibling也即兄弟姐妹，Sp代表Spouse也即配偶
+ - Parch 整型变量，代表父母或子女的个数。其中Par代表Parent也即父母，Ch代表Child也即子女
+ - Ticket 字符型变量，代表乘客的船票号
+ - Fare 数值型，代表乘客的船票价
+ - Cabin 字符型，代表乘客所在的舱位，有缺失值
+ - Embarked 字符型，代表乘客登船口岸，适合转换为factor型变量
 
-  return(assemble.result)
+## 探索式数据分析
+### 乘客社会等级越高，幸存率越高
+对于第一个变量Pclass，先将其转换为factor类型变量。
+```{r echo=TRUE, message=FALSE, results='hide'}
+data$Survived <- factor(data$Survived)
+```
+  
+可通过如下方式统计出每个Pclass幸存和遇难人数，如下  
+  
+```{r 'Survived vs. Pclass', cache=TRUE}
+ggplot(data = data[1:nrow(train),], mapping = aes(x = Pclass, y = ..count.., fill=Survived)) + 
+  geom_bar(stat = "count", position='dodge') + 
+  xlab('Pclass') + 
+  ylab('Count') + 
+  ggtitle('How Pclass impact survivor') + 
+  scale_fill_manual(values=c("#FF0000", "#00FF00")) +
+  geom_text(stat = "count", aes(label = ..count..), position=position_dodge(width=1), , vjust=-0.5) + 
+  #scale_fill_discrete(name="Survived", breaks=c(0, 1), labels=c("Perish", "Survived")) + 
+  #scale_color_manual(values=c("#FF0000", "#00FF00")) + 
+  theme(plot.title = element_text(hjust = 0.5), legend.position="bottom")
+```
+  
+从上图可见，Pclass=1的乘客大部分幸存，Pclass=2的乘客接近一半幸存，而Pclass=3的乘客只有不到25%幸存。  
+  
+为了更为定量的计算Pclass的预测价值，可以算出Pclass的WOE和IV如下。从结果可以看出，Pclass的IV为0.5，且“Highly Predictive”。由此可以暂时将Pclass作为预测模型的特征变量之一。
+```{r 'Pclass WOE and IV', cache=TRUE}
+WOETable(X=factor(data$Pclass[1:nrow(train)]), Y=data$Survived[1:nrow(train)])
+IV(X=factor(data$Pclass[1:nrow(train)]), Y=data$Survived[1:nrow(train)])
+```
+  
+### 不同Title的乘客幸存率不同
+乘客姓名重复度太低，不适合直接使用。而姓名中包含Mr. Mrs. Dr.等具体有文化特征的信息，可将之抽取出来。  
+  
+本文使用如下方式从姓名中抽取乘客的Title
+```{r 'Extracting title', message=FALSE, results='hide'}
+# data$Title <- gsub('(.*, )|(\\..*)', '', data$Name)
+# data$Title[data$Title %in% c('Mlle', 'Ms', 'Lady')] <- 'Miss'
+# data$Title[data$Title %in% c('Mme', 'the Countess', 'Dona')] <- 'Mrs'
+# data$Title[data$Title %in% c('Mr', 'Capt', 'Major', 'Col', 'Don', 'Jonkheer')] <- 'Mr'
+# data$Title <- as.factor(data$Title)
+
+data$Title <- sapply(data$Name, FUN=function(x) {strsplit(x, split='[,.]')[[1]][2]})
+data$Title <- sub(' ', '', data$Title)
+data$Title[data$Title %in% c('Mme', 'Mlle')] <- 'Mlle'
+data$Title[data$Title %in% c('Capt', 'Don', 'Major', 'Sir')] <- 'Sir'
+data$Title[data$Title %in% c('Dona', 'Lady', 'the Countess', 'Jonkheer')] <- 'Lady'
+data$Title <- factor(data$Title)
+```
+  
+抽取完乘客的Title后，统计出不同Title的乘客的幸存与遇难人数  
+```{r 'Survived vs. Title', cache=TRUE}
+ggplot(data = data[1:nrow(train),], mapping = aes(x = Title, y = ..count.., fill=Survived)) + 
+  geom_bar(stat = "count", position='stack') + 
+  xlab('Title') + 
+  ylab('Count') + 
+  ggtitle('How Title impact survivor') + 
+  scale_fill_discrete(name="Survived", breaks=c(0, 1), labels=c("Perish", "Survived")) + 
+  geom_text(stat = "count", aes(label = ..count..), position=position_stack(vjust = 0.5)) +
+  theme(plot.title = element_text(hjust = 0.5), legend.position="bottom")
+```
+  
+从上图可看出，Title为Mr的乘客幸存比例非常小，而Title为Mrs和Miss的乘客幸存比例非常大。这里使用WOE和IV来定量计算Title这一变量对于最终的预测是否有用。从计算结果可见，IV为1.520702，且"Highly Predictive"。因此，可暂将Title作为预测模型中的一个特征变量。
+```{r 'Calculate title WOE and IV', cache = TRUE, cache=TRUE}
+WOETable(X=data$Title[1:nrow(train)], Y=data$Survived[1:nrow(train)])
+IV(X=data$Title[1:nrow(train)], Y=data$Survived[1:nrow(train)])
+```
+  
+### 女性幸存率远高于男性
+对于Sex变量，由Titanic号沉没的背景可知，逃生时遵循“妇女与小孩先走”的规则，由此猜想，Sex变量应该对预测乘客幸存有帮助。  
+  
+如下数据验证了这一猜想，大部分女性（233/(233+81)=74.20%）得以幸存，而男性中只有很小部分（109/(109+468)=22.85%）幸存。  
+```{r 'Survived vs. Sex', cache=TRUE}
+data$Sex <- as.factor(data$Sex)
+ggplot(data = data[1:nrow(train),], mapping = aes(x = Sex, y = ..count.., fill=Survived)) + 
+  geom_bar(stat = 'count', position='dodge') + 
+  xlab('Sex') + 
+  ylab('Count') + 
+  ggtitle('How Sex impact survivo') + 
+  geom_text(stat = "count", aes(label = ..count..), position=position_dodge(width=1), , vjust=-0.5) + 
+  theme(plot.title = element_text(hjust = 0.5), legend.position="bottom")
+```
+  
+可过计算WOE和IV可知，Sex的IV为1.34且"Highly Predictive"，可暂将Sex作为特征变量。
+```{r 'Calculate Sex WOE and IV', cache=TRUE}
+WOETable(X=data$Sex[1:nrow(train)], Y=data$Survived[1:nrow(train)])
+IV(X=data$Sex[1:nrow(train)], Y=data$Survived[1:nrow(train)])
+```
+  
+### 未成年人幸存率高于成年人
+结合背景，按照“妇女与小孩先走”的规则，未成年人应该有更大可能幸存。如下图所示，Age < 18的乘客中，幸存人数确实高于遇难人数。同时青壮年乘客中，遇难人数远高于幸存人数。
+```{r 'Survived vs. Age', cache=TRUE}
+ggplot(data = data[(!is.na(data$Age)) & row(data[, 'Age']) <= 891, ], aes(x = Age, color=Survived)) + 
+  geom_line(aes(label=..count..), stat = 'bin', binwidth=5) + 
+  labs(title = "How Age impact survivor", x = "Age", y = "Count", fill = "Survived") + 
+  theme(plot.title = element_text(hjust = 0.5), legend.position="bottom")
+```
+  
+### 配偶及兄弟姐妹数适中的乘客更易幸存
+对于SibSp变量，分别统计出幸存与遇难人数。
+```{r 'Survived vs. SibSp', cache=TRUE}
+#data$SibSp <- as.factor(data$SibSp)
+ggplot(data = data[1:nrow(train),], mapping = aes(x = SibSp, y = ..count.., fill=Survived)) + 
+  geom_bar(stat = 'count', position='dodge') + 
+  labs(title = "How SibSp impact survivor", x = "Sibsp", y = "Count", fill = "Survived") + 
+  geom_text(stat = "count", aes(label = ..count..), position=position_dodge(width=1), , vjust=-0.5) + 
+  theme(plot.title = element_text(hjust = 0.5), legend.position="bottom")
+```
+  
+从上图可见，SibSp为0时，幸存率低于1/3，而当SibSp为1或2时，幸存率高于50%，当SibSp大于等于3时，幸存率非常低。可通过计算WOE与IV定量计算SibSp对预测的贡献。IV为0.1448994，且"Highly Predictive"。
+```{r 'Calculate SibSp WOE and IV', cache=TRUE}
+WOETable(X=as.factor(data$SibSp[1:nrow(train)]), Y=data$Survived[1:nrow(train)])
+IV(X=as.factor(data$SibSp[1:nrow(train)]), Y=data$Survived[1:nrow(train)])
+```
+  
+### 父母与子女数为1到3的乘客更可能幸存
+对于Parch变量，分别统计出幸存与遇难人数。
+```{r 'Survived vs. Parch', cache=TRUE}
+#data$Parch <- as.factor(data$Parch)
+ggplot(data = data[1:nrow(train),], mapping = aes(x = Parch, y = ..count.., fill=Survived)) + 
+  geom_bar(stat = 'count', position='dodge') + 
+  labs(title = "How Parch impact survivor", x = "Parch", y = "Count", fill = "Survived") + 
+  geom_text(stat = "count", aes(label = ..count..), position=position_dodge(width=1), , vjust=-0.5) + 
+  theme(plot.title = element_text(hjust = 0.5), legend.position="bottom")
+```
+  
+从上图可见，Parch为0时，幸存率低于1/3，而当Parch为1到3时，幸存率高于50%，当Parch大于等于4时，幸存率非常低。可通过计算WOE与IV定量计算Parch对预测的贡献。IV为0.1166611，且"Highly Predictive"。
+```{r 'Calculate Parch WOE and IV', cache=TRUE}
+WOETable(X=as.factor(data$Parch[1:nrow(train)]), Y=data$Survived[1:nrow(train)])
+IV(X=as.factor(data$Parch[1:nrow(train)]), Y=data$Survived[1:nrow(train)])
+```
+  
+### FamilySize为2到4的乘客幸存可能性较高
+SibSp与Parch都说明，当乘客无亲人时，幸存率较低，乘客有少数亲人时，幸存率高于50%，而当亲人数过高时，幸存率反而降低。在这里，可以考虑将SibSp与Parch相加，生成新的变量，FamilySize。
+```{r 'Survived vs. FamilySize', cache=TRUE}
+data$FamilySize <- data$SibSp + data$Parch + 1
+ggplot(data = data[1:nrow(train),], mapping = aes(x = FamilySize, y = ..count.., fill=Survived)) + 
+  geom_bar(stat = 'count', position='dodge') + 
+  xlab('FamilySize') + 
+  ylab('Count') + 
+  ggtitle('How FamilySize impact survivor') + 
+  geom_text(stat = "count", aes(label = ..count..), position=position_dodge(width=1), , vjust=-0.5) + 
+  theme(plot.title = element_text(hjust = 0.5), legend.position="bottom")
+```
+  
+计算FamilySize的WOE和IV可知，IV为0.3497672，且“Highly Predictive”。由SibSp与Parch派生出来的新变量FamilySize的IV高于SibSp与Parch的IV，因此，可将这个派生变量FamilySize作为特征变量。
+```{r 'Calculate FamilySize WOE and IV', cache=TRUE}
+WOETable(X=as.factor(data$FamilySize[1:nrow(train)]), Y=data$Survived[1:nrow(train)])
+IV(X=as.factor(data$FamilySize[1:nrow(train)]), Y=data$Survived[1:nrow(train)])
+```
+  
+### 共票号乘客幸存率高
+对于Ticket变量，重复度非常低，无法直接利用。先统计出每张票对应的乘客数。 
+```{r 'Aggregate Ticket'}
+ticket.count <- aggregate(data$Ticket, by = list(data$Ticket), function(x) sum(!is.na(x)))
+```
+  
+这里有个猜想，票号相同的乘客，是一家人，如果很可能同时幸存或者同时遇难。现将所有乘客按照Ticket分为两组，一组是使用单独票号，另一组是与他人共享票号，并统计出各组的幸存与遇难人数。
+```{r 'Survived vs. TicketCount', cache=TRUE}
+data$TicketCount <- apply(data, 1, function(x) ticket.count[which(ticket.count[, 1] == x['Ticket']), 2])
+data$TicketCount <- factor(sapply(data$TicketCount, function(x) ifelse(x > 1, 'Share', 'Unique')))
+ggplot(data = data[1:nrow(train),], mapping = aes(x = TicketCount, y = ..count.., fill=Survived)) + 
+  geom_bar(stat = 'count', position='dodge') + 
+  xlab('TicketCount') + 
+  ylab('Count') + 
+  ggtitle('How TicketCount impact survivor') + 
+  geom_text(stat = "count", aes(label = ..count..), position=position_dodge(width=1), , vjust=-0.5) + 
+  theme(plot.title = element_text(hjust = 0.5), legend.position="bottom")
+```
+  
+由上图可见，未与他人同票号的乘客，只有130/(130+351)=27%幸存，而与他人同票号的乘客有212/(212+198)=51.7%幸存。计算TicketCount的WOE与IV如下。其IV为0.2751882，且"Highly Predictive"
+```{r 'Calculate TicketCount WOE and IV', cache=TRUE}
+WOETable(X=data$TicketCount[1:nrow(train)], Y=data$Survived[1:nrow(train)])
+IV(X=data$TicketCount[1:nrow(train)], Y=data$Survived[1:nrow(train)])
+```
+  
+### 支出船票费越高幸存率越高
+对于Fare变量，由下图可知，Fare越大，幸存率越高。
+```{r 'Survived vs. Fare', cache=TRUE}
+ggplot(data = data[(!is.na(data$Fare)) & row(data[, 'Fare']) <= 891, ], aes(x = Fare, color=Survived)) + 
+  geom_line(aes(label=..count..), stat = 'bin', binwidth=10)  + 
+  labs(title = "How Fare impact survivor", x = "Fare", y = "Count", fill = "Survived") + 
+  theme(plot.title = element_text(hjust = 0.5), legend.position="bottom")
+```
+  
+### 不同仓位的乘客幸存率不同
+对于Cabin变量，其值以字母开始，后面伴以数字。这里有一个猜想，字母代表某个区域，数据代表该区域的序号。类似于火车票即有车箱号又有座位号。因此，这里可尝试将Cabin的首字母提取出来，并分别统计出不同首字母仓位对应的乘客的幸存率。
+```{r 'Survived vs. Cabin', cache=TRUE}
+ggplot(data[1:nrow(train), ], mapping = aes(x = as.factor(sapply(data$Cabin[1:nrow(train)], function(x) str_sub(x, start = 1, end = 1))), y = ..count.., fill = Survived)) +
+  geom_bar(stat = 'count', position='dodge') + 
+  xlab('Cabin') +
+  ylab('Count') +
+  ggtitle('How Cabin impact survivor') +
+  geom_text(stat = "count", aes(label = ..count..), position=position_dodge(width=1), , vjust=-0.5) + 
+  theme(plot.title = element_text(hjust = 0.5), legend.position="bottom")
+```
+  
+由上图可见，仓位号首字母为B，C，D，E，F的乘客幸存率均高于50%，而其它仓位的乘客幸存率均远低于50%。仓位变量的WOE及IV计算如下。由此可见，Cabin的IV为0.1866526，且“Highly Predictive”
+```{r 'Calculate Cabin WOE and IV', cache=TRUE}
+data$Cabin <- sapply(data$Cabin, function(x) str_sub(x, start = 1, end = 1))
+WOETable(X=as.factor(data$Cabin[1:nrow(train)]), Y=data$Survived[1:nrow(train)])
+IV(X=as.factor(data$Cabin[1:nrow(train)]), Y=data$Survived[1:nrow(train)])
+```
+  
+### Embarked为S的乘客幸存率较低
+Embarked变量代表登船码头，现通过统计不同码头登船的乘客幸存率来判断Embarked是否可用于预测乘客幸存情况。
+```{r 'Survived vs. Embarked', cache=TRUE}
+ggplot(data[1:nrow(train), ], mapping = aes(x = Embarked, y = ..count.., fill = Survived)) +
+  geom_bar(stat = 'count', position='dodge') + 
+  xlab('Embarked') +
+  ylab('Count') +
+  ggtitle('How Embarked impact survivor') +
+  geom_text(stat = "count", aes(label = ..count..), position=position_dodge(width=1), , vjust=-0.5) + 
+  theme(plot.title = element_text(hjust = 0.5), legend.position="bottom")
+```
+  
+从上图可见，Embarked为S的乘客幸存率仅为217/(217+427)=33.7%，而Embarked为C或为NA的乘客幸存率均高于50%。初步判断Embarked可用于预测乘客是否幸存。Embarked的WOE和IV计算如下。
+```{r 'Calculate Embarked WOE and IV', cache=TRUE}
+WOETable(X=as.factor(data$Embarked[1:nrow(train)]), Y=data$Survived[1:nrow(train)])
+IV(X=as.factor(data$Embarked[1:nrow(train)]), Y=data$Survived[1:nrow(train)])
+```
+从上述计算结果可见，IV为0.1227284，且“Highly Predictive”。
+  
+## 填补缺失值
+### 列出所有缺失数据
+```{r 'List missing values', cache=TRUE}
+attach(data)
+  missing <- list(Pclass=nrow(data[is.na(Pclass), ]))
+  missing$Name <- nrow(data[is.na(Name), ])
+  missing$Sex <- nrow(data[is.na(Sex), ])
+  missing$Age <- nrow(data[is.na(Age), ])
+  missing$SibSp <- nrow(data[is.na(SibSp), ])
+  missing$Parch <- nrow(data[is.na(Parch), ])
+  missing$Ticket <- nrow(data[is.na(Ticket), ])
+  missing$Fare <- nrow(data[is.na(Fare), ])
+  missing$Cabin <- nrow(data[is.na(Cabin), ])
+  missing$Embarked <- nrow(data[is.na(Embarked), ])
+  for (name in names(missing)) {
+    if (missing[[name]][1] > 0) {
+      print(paste('', name, ' miss ', missing[[name]][1], ' values', sep = ''))
+    }
+  }
+detach(data)
+```
+  
+### 预测乘客年龄
+缺失年龄信息的乘客数为263，这里通过其它变量来预测缺失的年龄信息。
+```{r 'Predict missing Age'}
+age.model <- rpart(Age ~ Pclass + Sex + SibSp + Parch + Fare + Embarked + Title + FamilySize, data=data[!is.na(data$Age), ], method='anova')
+data$Age[is.na(data$Age)] <- predict(age.model, data[is.na(data$Age), ])
+```
+
+
+
+### 填补缺失的Embarked值
+从如下数据可见，缺失Embarked信息的乘客的Pclass均为1，且Fare均为80。
+```{r 'List missing Embarked'}
+data[is.na(data$Embarked), c('PassengerId', 'Pclass', 'Fare', 'Embarked')]
+```
+
+由下图所示，Embarked为C且Pclass为1的乘客的Fare中位数为80。
+```{r 'Fare median value of each Embarked and Pclass', cache=TRUE}
+ggplot(data[!is.na(data$Embarked),], aes(x=Embarked, y=Fare, fill=factor(Pclass))) +
+  geom_boxplot() +
+  geom_hline(aes(yintercept=80), color='red', linetype='dashed', lwd=2) +
+  scale_y_continuous(labels=dollar_format()) + theme_few() + 
+  xlab('Embarked') + 
+  ylab('Fare') + 
+  ggtitle('Fare distribution among Embarked and Pclass') + 
+  theme(plot.title = element_text(hjust = 0.5), legend.position="bottom")
+```
+
+因此可以将缺失的Embarked值设置为'C'。
+```{r 'Supplement missing Embarked'}
+data$Embarked[is.na(data$Embarked)] <- 'C'
+data$Embarked <- as.factor(data$Embarked)
+```
+
+### 填补一个缺失的Fare值
+由于缺失Fare值的记录非常少，一般可直接使用平均值或者中位数填补该缺失值。同时，由于有Pclass变量标识乘客的社会经济等级，这里使用同一Pclass的乘客的Fare中位数填补缺失值。
+
+```{r 'Supplement missing Fare with median Fare of Pclass', echo=TRUE}
+data$Fare[is.na(data$Fare)] <- median(data$Fare, na.rm=TRUE)
+```
+  
+### 将缺失的Cabin设置为默认值
+缺失Cabin信息的记录数较多，不适合使用中位数或者平均值填补，一般通过使用其它变量预测或者直接将缺失值设置为默认值的方法填补。由于Cabin信息不太容易从其它变量预测，并且在上一节中，将NA单独对待时，其IV已经比较高。因此这里直接将缺失的Cabin设置为一个默认值。
+```{r 'Set default Cabin value'}
+data$Cabin <- as.factor(sapply(data$Cabin, function(x) ifelse(is.na(x), 'X', str_sub(x, start = 1, end = 1))))
+```
+  
+## 训练模型
+```{r 'Train model', cache=TRUE}
+set.seed(415)
+model <- cforest(Survived ~ Pclass + Title + Sex + Age + SibSp + Parch + FamilySize + TicketCount + Fare + Cabin + Embarked, data = data[train.row, ], controls=cforest_unbiased(ntree=2000, mtry=3))
+```
+  
+## 交叉验证
+一般情况下，应该将训练数据分为两部分，一部分用于训练，另一部分用于验证。或者使用k-fold交叉验证。本文将所有训练数据都用于训练，然后随机选取30%数据集用于验证。
+```{r 'Cross validation', cache=TRUE}
+cv.summarize <- function(data.true, data.predict) {
+  print(paste('Recall:', Recall(data.true, data.predict)))
+  print(paste('Precision:', Precision(data.true, data.predict)))
+  print(paste('Accuracy:', Accuracy(data.predict, data.true)))
+  print(paste('AUC:', AUC(data.predict, data.true)))
 }
+set.seed(415)
+cv.test.sample <- sample(1:nrow(train), as.integer(0.3 * nrow(train)), replace = TRUE)
+cv.test <- data[cv.test.sample,]
+cv.prediction <- predict(model, cv.test, OOB=TRUE, type = "response")
+cv.summarize(cv.test$Survived, cv.prediction)
 ```
-
-
-```{r 'Definition of cross validation function'}
-cross.validation <- function(predict.data, true.data) {
-  sapply(colnames(predict.data), function(name){
-    print(name)
-    print(paste(' Recall:', Recall(true.data, predict.data[[name]])))
-    print(paste(' Precision:', Precision(true.data, predict.data[[name]])))
-    print(paste(' Accuracy', Accuracy(predict.data[[name]], true.data)))
-    print(paste(' AUC', AUC(predict.data[[name]], true.data)))
-    print('')
-  })
-}
+  
+## 预测
+```{r 'First predic', cache=TRUE}
+predict.result <- predict(model, data[(1+nrow(train)):(nrow(data)), ], OOB=TRUE, type = "response")
+output <- data.frame(PassengerId = test$PassengerId, Survived = predict.result)
+write.csv(output, file = "cit1.csv", row.names = FALSE)
 ```
-
-```{r 'Cross validation'}
-cv.predict <- assemble.predict(cv.test)
-cross.validation(cv.predict, cv.test_true)
+  
+该模型预测结果在Kaggle的得分为0.80383，排第992名，前992/6292=15.8%。
+  
+## 调优
+### 去掉关联特征
+由于FamilySize结合了SibSp与Parch的信息，因此可以尝试将SibSp与Parch从特征变量中移除。
+```{r 'Remove SibSp and Parch', cache=TRUE}
+set.seed(415)
+model <- cforest(Survived ~ Pclass + Title + Sex + Age + FamilySize + TicketCount + Fare + Cabin + Embarked, data = data[train.row, ], controls=cforest_unbiased(ntree=2000, mtry=3))
+predict.result <- predict(model, data[test.row, ], OOB=TRUE, type = "response")
+submit <- data.frame(PassengerId = test$PassengerId, Survived = predict.result)
+write.csv(submit, file = "cit2.csv", row.names = FALSE)
 ```
-
-
-```{r 'Predicting'}
-test.data <- full[(nrow(train)+1):(nrow(train)+nrow(test)), model.features]
-test.predict <- assemble.predict(test.data)
-
-test.result <- cbind(full$PassengerId[(nrow(train)+1):(nrow(full))], test.predict)
+  
+该模型预测结果在Kaggle的得分仍为0.80383。
+  
+### 去掉IV最低的Cabin
+由于FamilySize结合了SibSp与Parch的信息，因此可以尝试将SibSp与Parch从特征变量中移除。
+```{r 'Remove Cabin', cache=TRUE}
+set.seed(415)
+model <- cforest(Survived ~ Pclass + Title + Sex + Age + FamilySize + TicketCount + Fare + Embarked, data = data[train.row, ], controls=cforest_unbiased(ntree=2000, mtry=3))
+predict.result <- predict(model, data[test.row, ], OOB=TRUE, type = "response")
+submit <- data.frame(PassengerId = test$PassengerId, Survived = predict.result)
+write.csv(submit, file = "cit3.csv", row.names = FALSE)
 ```
+  
+该模型预测结果在Kaggle的得分仍为0.80383。
+  
+### 增加派生特征
+对于Name变量，上文从中派生出了Title变量。由于以下原因，可推测乘客的姓氏可能具有一定的预测作用
 
-```{r 'Predicted result saving'}
-for (name in colnames(test.result[, -1])) {
-  output.data <- data.frame(PassengerId = test.result[, 1], Survived = test.result[[name]])
-  write.csv(output.data, file=paste('result/', name, '.result.csv', sep = ''), row.names = FALSE, quote = FALSE)
-}
+  - 西方国家中人名的名重复度较高，而姓重复度较低，姓氏具有一定辨识度
+  - 部分国家的姓氏具有一定的身份识别作用
+  - 姓氏相同的乘客，可能是一家人（这一点也基于西方国家姓氏重复较低这一特点），而一家人同时幸存或遇难的可能性较高
+
+考虑到只出现一次的姓氏不可能同时出现在训练集和测试集中，因此将只出现一次的姓氏均命名为'Small'
+
+```{r 'Derive FamilyID', cache=TRUE}
+data$Surname <- sapply(data$Name, FUN=function(x) {strsplit(x, split='[,.]')[[1]][1]})
+data$FamilyID <- paste(as.character(data$FamilySize), data$Surname, sep="")
+data$FamilyID[data$FamilySize <= 2] <- 'Small'
+# Delete erroneous family IDs
+famIDs <- data.frame(table(data$FamilyID))
+famIDs <- famIDs[famIDs$Freq <= 2,]
+data$FamilyID[data$FamilyID %in% famIDs$Var1] <- 'Small'
+# Convert to a factor
+data$FamilyID <- factor(data$FamilyID)
 ```
+  
+```{r 'Predict with FamilyID', cache=TRUE}
+set.seed(415)
+model <- cforest(as.factor(Survived) ~ Pclass + Sex + Age + Fare + Embarked + Title + FamilySize + FamilyID + TicketCount, data = data[train.row, ], controls=cforest_unbiased(ntree=2000, mtry=3))
+predict.result <- predict(model, data[test.row, ], OOB=TRUE, type = "response")
+submit <- data.frame(PassengerId = test$PassengerId, Survived = predict.result)
+write.csv(submit, file = "cit4.csv", row.names = FALSE)
+```
+  
+该模型预测结果在Kaggle的得分仍为0.82297，排第207名，前114/6292=3.3%
+  
+### 其它
+缺失的两个Embarked值，根据上述方法用C填补。经过测试，如果使用S填补，Kaggle得分有所提高。但解释性不强，而且由于Kaggle的排行榜分Public和Private两部分，Public排名的提升并不能保证最终排名也能提升，因此本节所使用的提升排名的方法，并不可取，仅供参考。
+```{r 'Supplement Embarked with S', cache=TRUE}
+data$Embarked[c(62,830)] = "S"
+data$Embarked <- factor(data$Embarked)
+```
+```{r 'Final model', cache=TRUE}
+set.seed(415)
+model <- cforest(as.factor(Survived) ~ Pclass + Sex + Age + Fare + Embarked + Title + FamilySize + FamilyID + TicketCount, data = data[train.row, ], controls=cforest_unbiased(ntree=2000, mtry=3))
+predict.result <- predict(model, data[test.row, ], OOB=TRUE, type = "response")
+submit <- data.frame(PassengerId = test$PassengerId, Survived = predict.result)
+write.csv(submit, file = "cit5.csv", row.names = FALSE)
+```
+  
+该模型预测结果在Kaggle的得分仍为0.82775，排第114名，前114/6292=1.8%
+![Kaggle rank first 2%](//www.jasongj.com/img/ml/classification/kaggle_rank.png)
 
-
-
-
-
-
-
+# 总结
+本文了如何通过数据预览，探索式数据分析，缺失数据填补，删除关联特征以及派生新特征等方法，在Kaggle的Titanic幸存预测竞赛中获得前2%提名的具体方法。  
+下一篇文章将侧重讲解使用机器学习解决工程问题的一般思路和方法。
 
 
 
