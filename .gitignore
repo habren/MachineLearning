@@ -1,0 +1,5 @@
+*_cache
+*_files
+.R*history
+.DS_Store
+.RData
